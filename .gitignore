@@ -1,0 +1,25 @@
+# Environnements virtuels
+venv/
+venv_rag/
+.env/
+
+# Données brutes et intermédiaires
+data/raw/
+data/intermediate/
+data/processed/
+
+# Fichiers lourds
+*.json
+*.jsonl
+*.parquet
+*.csv
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log

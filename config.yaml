@@ -1,0 +1,4 @@
+city: "Paris"
+max_chunk_tokens: 300
+faiss_index_path: "data/vectors/faiss_index.bin"
+metadata_path: "data/vectors/metadata.csv"
