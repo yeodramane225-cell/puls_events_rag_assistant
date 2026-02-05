@@ -1,3 +1,16 @@
+"""
+Pipeline RAG minimal du projet Puls-Events.
+
+Ce module :
+- génère les embeddings des questions via Ollama (nomic-embed-text),
+- interroge l’index FAISS pour retrouver les chunks pertinents,
+- construit un prompt contextuel,
+- génère une réponse via le modèle Mistral.
+
+Auteur : Yeo
+Projet : Puls-Events RAG Assistant
+"""
+
 import faiss
 import pandas as pd
 import numpy as np
@@ -26,6 +39,19 @@ index = faiss.read_index("data/processed/faiss_index.bin")
 df_chunks = pd.read_csv("data/processed/events_chunks.csv")
 
 def rag_query(question):
+    """
+    Exécute une requête RAG simple :
+    - embed la question,
+    - recherche les chunks les plus proches via FAISS,
+    - construit un prompt,
+    - génère une réponse via Mistral.
+
+    Args:
+        question (str): question utilisateur.
+
+    Returns:
+        str: réponse générée par le modèle.
+    """
     q_emb = embed_text(question).reshape(1, -1)
     distances, indices = index.search(q_emb, 5)
 

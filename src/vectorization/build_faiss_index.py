@@ -3,12 +3,11 @@ import faiss
 import numpy as np
 import subprocess
 import json
-import pickle
 import time
 import os
 
-# Dossier de sortie
-os.makedirs("data/vectorstore", exist_ok=True)
+# Dossier de sortie (corrigé)
+os.makedirs("data/processed", exist_ok=True)
 
 
 # ---------------------------------------------------------
@@ -27,23 +26,19 @@ def embed_text(text):
         stderr=subprocess.PIPE
     )
 
-    # Décodage + séparation des lignes
-    output_raw = result.stdout.decode("utf-8").strip().split("\n")
-
-    # La dernière ligne contient le JSON valide
-    last_line = output_raw[-1]
+    # Ollama peut renvoyer plusieurs lignes → on prend la dernière
+    output_lines = result.stdout.decode("utf-8").strip().split("\n")
+    last_line = output_lines[-1]
 
     try:
         data = json.loads(last_line)
-
-        # IMPORTANT : nomic-embed-text renvoie directement la liste des embeddings
         return np.array(data, dtype="float32")
 
-    except Exception as e:
+    except Exception:
         print("\n--- ERREUR JSON OLLAMA ---")
         print("Dernière ligne reçue :", last_line)
         print("--------------------------\n")
-        raise e
+        raise
 
 
 # ---------------------------------------------------------
@@ -53,7 +48,7 @@ def embed_batch(texts):
     vectors = []
     for t in texts:
         vectors.append(embed_text(t))
-        time.sleep(0.05)  # évite de saturer Ollama
+        time.sleep(0.05)  # éviter de saturer Ollama
     return np.vstack(vectors)
 
 
@@ -64,7 +59,8 @@ def build_faiss_index():
     print("Chargement des chunks...")
     df = pd.read_csv("data/processed/events_chunks.csv")
 
-    assert "text_chunk" in df.columns, "La colonne 'text_chunk' est manquante !"
+    if "text_chunk" not in df.columns:
+        raise ValueError("La colonne 'text_chunk' est manquante dans events_chunks.csv")
 
     texts = df["text_chunk"].tolist()
     print(f"Nombre de chunks à vectoriser : {len(texts)}")
@@ -74,9 +70,12 @@ def build_faiss_index():
 
     print("\nVectorisation en cours...\n")
 
+    total_batches = (len(texts) - 1) // batch_size + 1
+
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
-        print(f"Batch {i//batch_size + 1} / {len(texts)//batch_size + 1}")
+        batch_id = i // batch_size + 1
+        print(f"Batch {batch_id} / {total_batches}")
         vectors = embed_batch(batch)
         all_vectors.append(vectors)
 
@@ -88,10 +87,10 @@ def build_faiss_index():
     index.add(embeddings)
 
     print("Sauvegarde de l’index...")
-    faiss.write_index(index, "data/vectorstore/faiss_index.bin")
+    faiss.write_index(index, "data/processed/faiss_index.bin")
 
     print("Sauvegarde des métadonnées...")
-    df.to_pickle("data/vectorstore/metadata.pkl")
+    df.to_pickle("data/processed/metadata.pkl")
 
     print("\n🎉 Index FAISS généré avec succès !")
 
