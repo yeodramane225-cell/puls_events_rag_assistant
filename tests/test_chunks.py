@@ -32,4 +32,3 @@ def test_chunks_not_empty():
     # Les chunks doivent contenir du texte significatif
     mean_length = df["text_chunk"].astype(str).str.len().mean()
     assert mean_length > 10, "Les chunks semblent trop courts ou mal générés."
-
