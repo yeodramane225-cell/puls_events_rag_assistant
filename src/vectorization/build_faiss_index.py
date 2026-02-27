@@ -70,10 +70,10 @@ def build_faiss_index():
             continue
 
         # Champs nécessaires pour ton RAG LangChain
-        date_start = fields.get("date_start", "")
-        date_end = fields.get("date_end", "")
-        title = fields.get("title", "")
-        city = fields.get("city", "")
+        date_start = fields.get("date_start", "") or ""
+        date_end = fields.get("date_end", "") or ""
+        title = fields.get("title", "") or ""
+        city = fields.get("city", "") or ""
 
         for c in chunk_text(description):
             chunks.append(c)
@@ -88,16 +88,33 @@ def build_faiss_index():
 
     print(f"{len(chunks)} chunks générés")
 
-    # Sécurité : index vide si dataset vide
+    # 🔥 Correction : FAISS ne plante plus jamais
     if not chunks:
         print("⚠️ Aucun chunk généré, création d'un index FAISS vide.")
         dim = 1024  # dimension du modèle mistral-embed
         index = faiss.IndexFlatL2(dim)
         faiss.write_index(index, INDEX_PATH)
+
+        # Forcer les colonnes même si metadata est vide
+        empty_meta = [{
+            "description": "",
+            "chunk": "",
+            "date_start": "",
+            "date_end": "",
+            "title": "",
+            "city": ""
+        }]
         with open(META_PATH, "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=2)
+            json.dump(empty_meta, f, ensure_ascii=False, indent=2)
+
         print("Index FAISS vide généré.")
         return
+
+    # 🔥 Forcer les colonnes même si certaines lignes ne les ont pas
+    for m in metadata:
+        for col in ["date_start", "date_end", "title", "city"]:
+            if col not in m:
+                m[col] = ""
 
     print("Vectorisation...")
     vectors = []
