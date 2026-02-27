@@ -1,68 +1,47 @@
 import pandas as pd
 import faiss
 import numpy as np
-import subprocess
 import json
-import time
 import os
+import requests
 
-# Dossier de sortie (corrigé)
-os.makedirs("data/processed", exist_ok=True)
+os.makedirs("data/vectorstore", exist_ok=True)
 
+MISTRAL_API_KEY = "koYSEltxtO2OhW0twIdOJTzbZDxYUEzt"
+EMBEDDING_MODEL = "mistral-embed"
 
-# ---------------------------------------------------------
-# 1. Fonction pour générer un embedding via Ollama
-# ---------------------------------------------------------
-def embed_text(text):
-    """
-    Appelle Ollama pour générer un embedding avec nomic-embed-text.
-    Ollama renvoie parfois plusieurs lignes → on prend la dernière ligne JSON.
-    Le modèle renvoie directement une LISTE d'embeddings (pas un dict).
-    """
-    result = subprocess.run(
-        ["ollama", "run", "nomic-embed-text"],
-        input=text.encode("utf-8"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-
-    # Ollama peut renvoyer plusieurs lignes → on prend la dernière
-    output_lines = result.stdout.decode("utf-8").strip().split("\n")
-    last_line = output_lines[-1]
-
-    try:
-        data = json.loads(last_line)
-        return np.array(data, dtype="float32")
-
-    except Exception:
-        print("\n--- ERREUR JSON OLLAMA ---")
-        print("Dernière ligne reçue :", last_line)
-        print("--------------------------\n")
-        raise
+CSV_PATH = "data/processed/events_chunks.csv"
+INDEX_PATH = "data/vectorstore/faiss_index.bin"
+META_PATH = "data/vectorstore/metadata.json"
 
 
-# ---------------------------------------------------------
-# 2. Vectorisation par batch
-# ---------------------------------------------------------
-def embed_batch(texts):
-    vectors = []
-    for t in texts:
-        vectors.append(embed_text(t))
-        time.sleep(0.05)  # éviter de saturer Ollama
+def embed_batch_mistral(texts):
+    url = "https://api.mistral.ai/v1/embeddings"
+    headers = {
+        "Authorization": f"Bearer {MISTRAL_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": EMBEDDING_MODEL,
+        "input": texts
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+
+    data = response.json()["data"]
+    vectors = [np.array(item["embedding"], dtype="float32") for item in data]
     return np.vstack(vectors)
 
 
-# ---------------------------------------------------------
-# 3. Script principal
-# ---------------------------------------------------------
 def build_faiss_index():
     print("Chargement des chunks...")
-    df = pd.read_csv("data/processed/events_chunks.csv")
+    df = pd.read_csv(CSV_PATH)
 
-    if "text_chunk" not in df.columns:
-        raise ValueError("La colonne 'text_chunk' est manquante dans events_chunks.csv")
+    if "chunk" not in df.columns:
+        raise ValueError("La colonne 'chunk' est manquante")
 
-    texts = df["text_chunk"].tolist()
+    texts = df["chunk"].tolist()
     print(f"Nombre de chunks à vectoriser : {len(texts)}")
 
     batch_size = 64
@@ -76,7 +55,8 @@ def build_faiss_index():
         batch = texts[i:i + batch_size]
         batch_id = i // batch_size + 1
         print(f"Batch {batch_id} / {total_batches}")
-        vectors = embed_batch(batch)
+
+        vectors = embed_batch_mistral(batch)
         all_vectors.append(vectors)
 
     embeddings = np.vstack(all_vectors)
@@ -87,10 +67,12 @@ def build_faiss_index():
     index.add(embeddings)
 
     print("Sauvegarde de l’index...")
-    faiss.write_index(index, "data/processed/faiss_index.bin")
+    faiss.write_index(index, INDEX_PATH)
 
     print("Sauvegarde des métadonnées...")
-    df.to_pickle("data/processed/metadata.pkl")
+    metadata = df.to_dict(orient="records")
+    with open(META_PATH, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
 
     print("\n🎉 Index FAISS généré avec succès !")
 

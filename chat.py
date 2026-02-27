@@ -1,12 +1,11 @@
-from src.rag.rag_query import rag_query
+from src.rag.langchain_rag import rag_langchain
 from src.rag.dataset_info import list_available_years  # pour /years
 
-# Variable globale définie AVANT toute utilisation
-DEBUG = False
+DEBUG = False  # variable globale
 
 
 def main():
-    global DEBUG  # autorisé car DEBUG est déjà défini
+    global DEBUG
 
     print("Assistant RAG — Puls Events")
     print("Tape 'exit' pour quitter.")
@@ -25,7 +24,7 @@ def main():
 Commandes disponibles :
   /help        → Affiche cette aide
   /years       → Liste toutes les années détectées dans le dataset
-  /debug on    → Active le mode debug (affiche les chunks FAISS) — (désactivé pour l'instant)
+  /debug on    → Active le mode debug (affiche les chunks FAISS)
   /debug off   → Désactive le mode debug
   exit         → Quitter le programme
 """)
@@ -39,10 +38,9 @@ Commandes disponibles :
                 print("\nErreur lors de la récupération des années :", e, "\n")
             continue
 
-        # Mode debug (préparé mais pas encore utilisé dans rag_query)
         if question.lower() == "/debug on":
             DEBUG = True
-            print("Mode debug activé (mais rag_query ne l'utilise pas encore).\n")
+            print("Mode debug activé.\n")
             continue
 
         if question.lower() == "/debug off":
@@ -50,10 +48,9 @@ Commandes disponibles :
             print("Mode debug désactivé.\n")
             continue
 
-        # Traitement RAG normal
+        # Traitement RAG via LangChain
         try:
-            # rag_query ne supporte PAS encore debug=DEBUG → on l'enlève
-            answer = rag_query(question)
+            answer = rag_langchain(question)
             print("\nAssistant:", answer, "\n")
         except Exception as e:
             print("\nErreur:", e, "\n")

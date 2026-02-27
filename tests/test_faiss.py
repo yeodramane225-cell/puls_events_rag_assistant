@@ -1,31 +1,29 @@
 """
 Tests unitaires pour vérifier l'existence de l'index FAISS
-et la capacité du moteur à effectuer une recherche.
+et la capacité du moteur à effectuer une recherche vectorielle.
 """
 
 import pytest
-
-# Ce test dépend de fichiers locaux non présents dans GitLab CI.
-# On l'ignore automatiquement dans le pipeline CI.
-pytest.skip("Test ignoré en CI car dépend de fichiers locaux.", allow_module_level=True)
-
 import faiss
 import numpy as np
 import os
+import json
+
+# Chemins réels selon ta structure actuelle
+INDEX_PATH = "data/vectorstore/faiss_index.bin"
+METADATA_PATH = "data/vectorstore/metadata.json"
 
 
 def test_faiss_index_exists():
-    """Vérifie que le fichier FAISS a bien été généré."""
-    assert os.path.exists("data/processed/faiss_index.bin"), \
-        "Le fichier faiss_index.bin est introuvable."
+    """Vérifie que les fichiers FAISS et metadata existent."""
+    assert os.path.exists(INDEX_PATH), "Le fichier faiss_index.bin est introuvable."
+    assert os.path.exists(METADATA_PATH), "Le fichier metadata.json est introuvable."
 
 
 def test_faiss_search():
     """Vérifie que l'index FAISS peut effectuer une recherche."""
-    index_path = "data/processed/faiss_index.bin"
-
     # Chargement de l'index
-    index = faiss.read_index(index_path)
+    index = faiss.read_index(INDEX_PATH)
 
     # Génération d'un vecteur aléatoire de la bonne dimension
     vec = np.random.rand(1, index.d).astype("float32")

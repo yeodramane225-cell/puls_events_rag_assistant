@@ -1,169 +1,90 @@
-"""
-Nettoyage, filtrage et chunking des événements OpenAgenda
-Projet : Puls-Events RAG Assistant
-Auteur : Yeo
-
-Ce script :
-- nettoie les champs textuels,
-- normalise les dates,
-- filtre les événements par région et période (< 1 an),
-- génère des chunks pour la vectorisation,
-- garantit qu'aucune ligne n'est supprimée AVANT filtrage.
-"""
-
+import json
+from datetime import datetime
+from dateutil import parser
+import os
 import pandas as pd
-import re
-from datetime import timedelta
-from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
-import warnings
 
-# Désactiver le warning BeautifulSoup sur les URLs
-warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
+# Fichier généré par load_api.py
+RAW_PATH = "data/raw/events_Paris_2025-01-01_to_future.json"
+OUTPUT_PATH = "data/processed/events_chunks.csv"
 
 
-# -----------------------------
-# 1. Nettoyage texte
-# -----------------------------
-def clean_text(text: str) -> str:
-    """Nettoie un texte : suppression HTML, espaces multiples, normalisation."""
-    if not isinstance(text, str):
-        return ""
-    text = BeautifulSoup(text, "html.parser").get_text()
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+def load_events():
+    with open(RAW_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-# -----------------------------
-# 2. Préprocessing
-# -----------------------------
-def preprocess_events(df: pd.DataFrame) -> pd.DataFrame:
-    """Nettoie les colonnes importantes du DataFrame sans supprimer de lignes."""
-    df = df.copy()
-
-    # Renommer les colonnes importantes du CSV OpenAgenda
-    mapping = {
-        "Titre": "title",
-        "Description": "description",
-        "Description longue": "long_description",
-        "Adresse": "address",
-        "Nom du lieu": "location_name",
-        "Ville": "city",
-        "Département": "department",
-        "Région": "region",
-        "Pays": "country",
-        "Mots clés": "keywords",
-        "Première date - Début": "start_date",
-        "Première date - Fin": "end_date",
-    }
-    df = df.rename(columns=mapping)
-
-    # Colonnes textuelles à nettoyer
-    text_cols = [
-        "title", "description", "long_description",
-        "address", "location_name", "city",
-        "department", "region", "country", "keywords"
-    ]
-
-    for col in text_cols:
-        if col in df.columns:
-            df[col] = df[col].apply(clean_text)
-
-    # Normalisation des dates en UTC
-    if "start_date" in df.columns:
-        df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce", utc=True)
-    if "end_date" in df.columns:
-        df["end_date"] = pd.to_datetime(df["end_date"], errors="coerce", utc=True)
-
-    return df
+def is_paris(city):
+    if not city:
+        return False
+    return "paris" in city.lower()
 
 
-# -----------------------------
-# 3. Filtrage géographique + temporel
-# -----------------------------
-def filter_events(df: pd.DataFrame, region_cible: str) -> pd.DataFrame:
-    """Filtre les événements par région et par période (< 1 an)."""
-    df = df.copy()
-
-    # Filtrage géographique
-    df = df[df["region"] == region_cible]
-
-    # Filtrage temporel : événements < 1 an (UTC-aware)
-    un_an = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=365)
-
-    df = df[
-        (df["start_date"] >= un_an) |
-        (df["end_date"] >= un_an)
-    ]
-
-    return df
+def parse_date(value):
+    if not value:
+        return None
+    try:
+        dt = parser.parse(value)
+        return dt.replace(tzinfo=None)
+    except:
+        return None
 
 
-# -----------------------------
-# 4. Chunking
-# -----------------------------
-def chunk_text(text: str, max_tokens: int = 300) -> list:
-    """Découpe un texte en chunks de taille raisonnable."""
-    words = text.split()
-    return [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), max_tokens)]
+def filter_events(events):
+    filtered = []
+    for ev in events:
+        city = ev.get("location_city")
+        if not is_paris(city):
+            continue
+
+        start = parse_date(ev.get("firstdate_begin"))
+        if not start:
+            continue
+
+        # Garder tous les événements depuis le 1er janvier 2025
+        if start >= datetime(2025, 1, 1):
+            filtered.append(ev)
+
+    return filtered
 
 
-def create_chunks(df: pd.DataFrame) -> pd.DataFrame:
-    """Génère un DataFrame contenant un chunk par ligne."""
-    rows = []
+def chunk_events(events):
+    chunks = []
+    for idx, ev in enumerate(events):
 
-    for _, row in df.iterrows():
-        full_text = " ".join([
-            row.get("title", ""),
-            row.get("description", ""),
-            row.get("long_description", ""),
-            row.get("address", ""),
-            row.get("location_name", ""),
-            row.get("city", ""),
-            row.get("region", ""),
-            row.get("country", ""),
-            row.get("keywords", "")
-        ])
+        # ⚠️ Ajout obligatoire pour le RAG
+        event_id = str(idx)
 
-        chunks = chunk_text(full_text)
+        desc = ev.get("longdescription_fr") or ev.get("description_fr") or ""
+        title = ev.get("title_fr") or "Sans titre"
 
-        for i, chunk in enumerate(chunks):
-            rows.append({
-                "event_id": row.get("Identifiant"),
-                "chunk_id": i,
-                "text_chunk": chunk
+        if not desc:
+            continue
+
+        # Découpage en chunks de 500 caractères
+        for i in range(0, len(desc), 500):
+            chunks.append({
+                "event_id": event_id,              # ← indispensable pour le RAG
+                "title": title,
+                "city": ev.get("location_city"),
+                "date_start": ev.get("firstdate_begin"),
+                "date_end": ev.get("lastdate_end"),
+                "chunk": desc[i:i+500]
             })
 
-    return pd.DataFrame(rows)
+    return chunks
 
 
-# -----------------------------
-# 5. Main
-# -----------------------------
 if __name__ == "__main__":
-    # Charger le CSV brut
-    df = pd.read_csv("data/raw/evenements-publics-openagenda.csv", sep=";")
+    events = load_events()
+    print("Événements bruts :", len(events))
 
-    # Nettoyage
-    df_clean = preprocess_events(df)
+    filtered = filter_events(events)
+    print("Événements filtrés (Paris + >= 2025-01-01) :", len(filtered))
 
-    # Vérification : aucune ligne supprimée avant filtrage
-    assert len(df_clean) == len(df), (
-        f"ERREUR : le nettoyage a supprimé des lignes ! "
-        f"{len(df_clean)} vs {len(df)}"
-    )
+    chunks = chunk_events(filtered)
+    print("Chunks générés :", len(chunks))
 
-    # Filtrage (exemple : Île-de-France)
-    REGION = "Île-de-France"
-    df_filtered = filter_events(df_clean, REGION)
-
-    # Chunking
-    df_chunks = create_chunks(df_filtered)
-
-    # Sauvegarde
-    df_chunks.to_csv("data/processed/events_chunks.csv", index=False)
-
-    print(f"Lignes initiales : {len(df)}")
-    print(f"Lignes après nettoyage : {len(df_clean)}")
-    print(f"Lignes après filtrage : {len(df_filtered)}")
-    print(f"Chunks générés : {len(df_chunks)}")
-
+    os.makedirs("data/processed", exist_ok=True)
+    pd.DataFrame(chunks).to_csv(OUTPUT_PATH, index=False, encoding="utf-8")
+    print("✔ Fichier écrit :", OUTPUT_PATH)

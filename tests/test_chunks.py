@@ -4,31 +4,22 @@ des chunks générés lors du préprocessing.
 """
 
 import pytest
-
-# Ce test dépend de fichiers locaux non présents dans GitLab CI.
-# On l'ignore automatiquement dans le pipeline CI.
-pytest.skip("Test ignoré en CI car dépend de fichiers locaux.", allow_module_level=True)
-
-import pandas as pd
+import json
 import os
 
+CHUNKS_PATH = "data/vectorstore/metadata.json"
 
-def test_chunks_exist():
-    """Vérifie que le fichier de chunks a bien été généré."""
-    assert os.path.exists("data/processed/events_chunks.csv"), \
-        "Le fichier events_chunks.csv est introuvable."
+
+def test_chunks_file_exists():
+    assert os.path.exists(CHUNKS_PATH), "Le fichier metadata.json est introuvable."
 
 
 def test_chunks_not_empty():
-    """Vérifie que le fichier contient des données valides."""
-    df = pd.read_csv("data/processed/events_chunks.csv")
+    with open(CHUNKS_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
-    # Le fichier ne doit pas être vide
-    assert len(df) > 0, "Le fichier des chunks est vide."
+    assert len(data) > 0, "Le fichier metadata.json est vide."
+    assert "chunk" in data[0], "La clé 'chunk' est manquante dans les metadata."
 
-    # La colonne 'text_chunk' doit exister
-    assert "text_chunk" in df.columns, "La colonne 'text_chunk' est manquante."
-
-    # Les chunks doivent contenir du texte significatif
-    mean_length = df["text_chunk"].astype(str).str.len().mean()
+    mean_length = sum(len(item["chunk"]) for item in data) / len(data)
     assert mean_length > 10, "Les chunks semblent trop courts ou mal générés."
