@@ -52,6 +52,7 @@ def build_faiss_index():
     for event in events:
         fields = event.get("fields", {})
 
+        # Texte riche combiné
         description = " ".join([
             fields.get("title", ""),
             fields.get("free_text", ""),
@@ -68,13 +69,26 @@ def build_faiss_index():
         if len(description) < 10:
             continue
 
+        # Champs nécessaires pour ton RAG LangChain
+        date_start = fields.get("date_start", "")
+        date_end = fields.get("date_end", "")
+        title = fields.get("title", "")
+        city = fields.get("city", "")
+
         for c in chunk_text(description):
             chunks.append(c)
-            metadata.append({"description": description, "chunk": c})
+            metadata.append({
+                "description": description,
+                "chunk": c,
+                "date_start": date_start,
+                "date_end": date_end,
+                "title": title,
+                "city": city
+            })
 
     print(f"{len(chunks)} chunks générés")
 
-    # 🔥 Correction : FAISS ne plante plus jamais
+    # Sécurité : index vide si dataset vide
     if not chunks:
         print("⚠️ Aucun chunk généré, création d'un index FAISS vide.")
         dim = 1024  # dimension du modèle mistral-embed
