@@ -1,7 +1,6 @@
-import pandas as pd
+import json
 import faiss
 import numpy as np
-import json
 import os
 import requests
 
@@ -10,9 +9,27 @@ os.makedirs("data/vectorstore", exist_ok=True)
 MISTRAL_API_KEY = "koYSEltxtO2OhW0twIdOJTzbZDxYUEzt"
 EMBEDDING_MODEL = "mistral-embed"
 
-CSV_PATH = "data/processed/events_chunks.csv"
+JSONL_PATH = "data/raw/evenements-publics-openagenda.json"
 INDEX_PATH = "data/vectorstore/faiss_index.bin"
 META_PATH = "data/vectorstore/metadata.json"
+
+
+def load_events_streaming(jsonl_path):
+    """
+    Lit un fichier JSONL massif ligne par ligne sans charger tout en mémoire.
+    """
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                yield json.loads(line)
+
+
+def chunk_text(text, max_tokens=300):
+    """
+    Découpe un texte long en chunks de taille raisonnable.
+    """
+    words = text.split()
+    return [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), max_tokens)]
 
 
 def embed_batch_mistral(texts):
@@ -21,60 +38,59 @@ def embed_batch_mistral(texts):
         "Authorization": f"Bearer {MISTRAL_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": EMBEDDING_MODEL,
-        "input": texts
-    }
+    payload = {"model": EMBEDDING_MODEL, "input": texts}
 
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
 
     data = response.json()["data"]
-    vectors = [np.array(item["embedding"], dtype="float32") for item in data]
-    return np.vstack(vectors)
+    return np.vstack([np.array(item["embedding"], dtype="float32") for item in data])
 
 
 def build_faiss_index():
-    print("Chargement des chunks...")
-    df = pd.read_csv(CSV_PATH)
+    print("Lecture du JSONL...")
+    events = list(load_events_streaming(JSONL_PATH))
+    print(f"{len(events)} événements chargés")
 
-    if "chunk" not in df.columns:
-        raise ValueError("La colonne 'chunk' est manquante")
+    print("Chunking...")
+    chunks = []
+    metadata = []
 
-    texts = df["chunk"].tolist()
-    print(f"Nombre de chunks à vectoriser : {len(texts)}")
+    for event in events:
+        description = event.get("description", "")
+        event_chunks = chunk_text(description)
 
+        for c in event_chunks:
+            chunks.append(c)
+            metadata.append({
+                "description": description,
+                "chunk": c
+            })
+
+    print(f"{len(chunks)} chunks générés")
+
+    print("Vectorisation...")
     batch_size = 64
-    all_vectors = []
+    vectors = []
 
-    print("\nVectorisation en cours...\n")
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        vectors.append(embed_batch_mistral(batch))
 
-    total_batches = (len(texts) - 1) // batch_size + 1
+    embeddings = np.vstack(vectors)
 
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        batch_id = i // batch_size + 1
-        print(f"Batch {batch_id} / {total_batches}")
-
-        vectors = embed_batch_mistral(batch)
-        all_vectors.append(vectors)
-
-    embeddings = np.vstack(all_vectors)
-
-    print("\nCréation de l’index FAISS...")
+    print("Construction FAISS...")
     dim = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(embeddings)
 
-    print("Sauvegarde de l’index...")
+    print("Sauvegarde...")
     faiss.write_index(index, INDEX_PATH)
 
-    print("Sauvegarde des métadonnées...")
-    metadata = df.to_dict(orient="records")
     with open(META_PATH, "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-    print("\n🎉 Index FAISS généré avec succès !")
+    print("🎉 Index FAISS généré avec succès !")
 
 
 if __name__ == "__main__":
