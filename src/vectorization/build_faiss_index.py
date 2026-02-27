@@ -16,7 +16,7 @@ META_PATH = "data/vectorstore/metadata.json"
 
 def load_events(json_path):
     """
-    Charge un fichier JSON (pas JSONL) provenant de l'API OpenDataSoft.
+    Charge un fichier JSON provenant de l'API OpenDataSoft.
     """
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -48,12 +48,27 @@ def build_faiss_index():
     events = load_events(JSON_PATH)
     print(f"{len(events)} événements chargés")
 
-    print("Chunking...")
+    print("Extraction + chunking...")
     chunks = []
     metadata = []
 
     for event in events:
-        description = event.get("fields", {}).get("description", "")
+        fields = event.get("fields", {})
+
+        # On prend le meilleur champ disponible
+        description = (
+            fields.get("longdescription")
+            or fields.get("free_text")
+            or fields.get("description")
+            or fields.get("shortdescription")
+            or fields.get("title")
+            or ""
+        )
+
+        # On ignore les textes trop courts ou vides
+        if not description or len(description.strip()) < 10:
+            continue
+
         event_chunks = chunk_text(description)
 
         for c in event_chunks:
@@ -65,6 +80,13 @@ def build_faiss_index():
 
     print(f"{len(chunks)} chunks générés")
 
+    # Sécurité : si aucun chunk → on arrête proprement
+    if not chunks:
+        raise ValueError(
+            "Aucun chunk généré. Le dataset OpenDataSoft ne contient pas de champs exploitables "
+            "(longdescription, free_text, description, shortdescription, title)."
+        )
+
     print("Vectorisation...")
     batch_size = 64
     vectors = []
@@ -72,6 +94,10 @@ def build_faiss_index():
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i:i + batch_size]
         vectors.append(embed_batch_mistral(batch))
+
+    # Sécurité : si aucun vecteur → on arrête proprement
+    if not vectors:
+        raise ValueError("Aucun vecteur généré. Vérifie les données d'entrée.")
 
     embeddings = np.vstack(vectors)
 
