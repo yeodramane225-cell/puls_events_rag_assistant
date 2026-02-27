@@ -1,6 +1,6 @@
 langchain
 faiss-cpu
-mistral
+mistralai
 pandas
 python-dotenv
 pyarrow
