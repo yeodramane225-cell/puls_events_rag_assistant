@@ -52,10 +52,8 @@ def build_faiss_index():
     for event in events:
         fields = event.get("fields", {})
 
-        # Identifiant unique
         event_id = event.get("recordid", "") or ""
 
-        # Texte riche combiné
         description = " ".join([
             fields.get("title", ""),
             fields.get("free_text", ""),
@@ -69,10 +67,10 @@ def build_faiss_index():
             fields.get("region", "")
         ]).strip()
 
+        # 🔥 Correction : chunk par défaut si vide
         if len(description) < 10:
-            continue
+            description = "Aucun contenu disponible pour cet événement."
 
-        # Champs nécessaires pour ton RAG LangChain
         date_start = fields.get("date_start", "") or ""
         date_end = fields.get("date_end", "") or ""
         title = fields.get("title", "") or ""
@@ -92,7 +90,6 @@ def build_faiss_index():
 
     print(f"{len(chunks)} chunks générés")
 
-    # 🔥 Sécurité : index vide si dataset vide
     if not chunks:
         print("⚠️ Aucun chunk généré, création d'un index FAISS vide.")
         dim = 1024
@@ -101,8 +98,8 @@ def build_faiss_index():
 
         empty_meta = [{
             "event_id": "",
-            "description": "",
-            "chunk": "",
+            "description": "Aucun contenu disponible.",
+            "chunk": "Aucun contenu disponible.",
             "date_start": "",
             "date_end": "",
             "title": "",
@@ -114,7 +111,6 @@ def build_faiss_index():
         print("Index FAISS vide généré.")
         return
 
-    # 🔥 Forcer les colonnes même si certaines lignes ne les ont pas
     required_cols = ["event_id", "date_start", "date_end", "title", "city"]
     for m in metadata:
         for col in required_cols:
