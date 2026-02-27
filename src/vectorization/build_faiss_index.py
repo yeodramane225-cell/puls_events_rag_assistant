@@ -52,6 +52,9 @@ def build_faiss_index():
     for event in events:
         fields = event.get("fields", {})
 
+        # Identifiant unique
+        event_id = event.get("recordid", "") or ""
+
         # Texte riche combiné
         description = " ".join([
             fields.get("title", ""),
@@ -78,6 +81,7 @@ def build_faiss_index():
         for c in chunk_text(description):
             chunks.append(c)
             metadata.append({
+                "event_id": event_id,
                 "description": description,
                 "chunk": c,
                 "date_start": date_start,
@@ -88,15 +92,15 @@ def build_faiss_index():
 
     print(f"{len(chunks)} chunks générés")
 
-    # 🔥 Correction : FAISS ne plante plus jamais
+    # 🔥 Sécurité : index vide si dataset vide
     if not chunks:
         print("⚠️ Aucun chunk généré, création d'un index FAISS vide.")
-        dim = 1024  # dimension du modèle mistral-embed
+        dim = 1024
         index = faiss.IndexFlatL2(dim)
         faiss.write_index(index, INDEX_PATH)
 
-        # Forcer les colonnes même si metadata est vide
         empty_meta = [{
+            "event_id": "",
             "description": "",
             "chunk": "",
             "date_start": "",
@@ -111,8 +115,9 @@ def build_faiss_index():
         return
 
     # 🔥 Forcer les colonnes même si certaines lignes ne les ont pas
+    required_cols = ["event_id", "date_start", "date_end", "title", "city"]
     for m in metadata:
-        for col in ["date_start", "date_end", "title", "city"]:
+        for col in required_cols:
             if col not in m:
                 m[col] = ""
 
