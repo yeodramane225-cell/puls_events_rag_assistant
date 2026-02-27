@@ -15,9 +15,6 @@ META_PATH = "data/vectorstore/metadata.json"
 
 
 def load_events(json_path):
-    """
-    Charge un fichier JSON provenant de l'API OpenDataSoft.
-    """
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         return data.get("results", [])
@@ -55,49 +52,38 @@ def build_faiss_index():
     for event in events:
         fields = event.get("fields", {})
 
-        # On prend le meilleur champ disponible
-        description = (
-            fields.get("longdescription")
-            or fields.get("free_text")
-            or fields.get("description")
-            or fields.get("shortdescription")
-            or fields.get("title")
-            or ""
-        )
+        # Construction d’un texte riche
+        description = " ".join([
+            fields.get("title", ""),
+            fields.get("free_text", ""),
+            fields.get("longdescription", ""),
+            fields.get("shortdescription", ""),
+            fields.get("conditions", ""),
+            fields.get("location_name", ""),
+            fields.get("address", ""),
+            fields.get("city", ""),
+            fields.get("department", ""),
+            fields.get("region", "")
+        ]).strip()
 
-        # On ignore les textes trop courts ou vides
-        if not description or len(description.strip()) < 10:
+        if len(description) < 10:
             continue
 
-        event_chunks = chunk_text(description)
-
-        for c in event_chunks:
+        for c in chunk_text(description):
             chunks.append(c)
-            metadata.append({
-                "description": description,
-                "chunk": c
-            })
+            metadata.append({"description": description, "chunk": c})
 
     print(f"{len(chunks)} chunks générés")
 
-    # Sécurité : si aucun chunk → on arrête proprement
     if not chunks:
-        raise ValueError(
-            "Aucun chunk généré. Le dataset OpenDataSoft ne contient pas de champs exploitables "
-            "(longdescription, free_text, description, shortdescription, title)."
-        )
+        raise ValueError("Dataset vide : aucun champ exploitable trouvé.")
 
     print("Vectorisation...")
-    batch_size = 64
     vectors = []
+    batch_size = 64
 
     for i in range(0, len(chunks), batch_size):
-        batch = chunks[i:i + batch_size]
-        vectors.append(embed_batch_mistral(batch))
-
-    # Sécurité : si aucun vecteur → on arrête proprement
-    if not vectors:
-        raise ValueError("Aucun vecteur généré. Vérifie les données d'entrée.")
+        vectors.append(embed_batch_mistral(chunks[i:i + batch_size]))
 
     embeddings = np.vstack(vectors)
 
