@@ -1,19 +1,18 @@
-"""
-Tests unitaires pour vérifier la génération d'embeddings
-via le modèle 'nomic-embed-text' exécuté avec Ollama.
-
-⚠️ Test désactivé :
-Sous PyTest, Ollama renvoie parfois un float au lieu d'un embedding
-à cause de la capture de stdout. Le test devient alors non fiable.
-"""
-
+import os
 import pytest
+from langchain_mistralai import MistralAIEmbeddings
 
-
-@pytest.mark.skip(reason="Ollama renvoie un format instable sous PyTest (stdout capturé)")
 def test_embedding_shape():
-    """
-    Test désactivé : sous PyTest, Ollama renvoie parfois un float
-    au lieu d'un embedding, ce qui rend le test non fiable.
-    """
-    pass
+    api_key = os.getenv("MISTRAL_API_KEY")
+    assert api_key, "La variable d'environnement MISTRAL_API_KEY est manquante."
+
+    embedder = MistralAIEmbeddings(
+        model="mistral-embed",
+        mistral_api_key=api_key
+    )
+
+    vector = embedder.embed_query("Bonjour le monde")
+
+    assert isinstance(vector, list)
+    assert len(vector) > 0
+    assert all(isinstance(x, float) for x in vector)
