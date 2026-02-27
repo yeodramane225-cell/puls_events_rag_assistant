@@ -1,4 +1,5 @@
 langchain
+langchain-mistralai
 faiss-cpu
 mistralai
 pandas
@@ -6,3 +7,4 @@ python-dotenv
 pyarrow
 pytest
 beautifulsoup4
+
