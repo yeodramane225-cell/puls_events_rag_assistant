@@ -17,7 +17,7 @@ build_faiss:
     - pip install --upgrade pip
     - pip install -r requirements.txt
   script:
-    - python src/rag/build_faiss_index.py
+    - python src/vectorization/build_faiss_index.py
   artifacts:
     paths:
       - data/vectorstore/
