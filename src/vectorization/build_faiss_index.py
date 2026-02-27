@@ -9,25 +9,21 @@ os.makedirs("data/vectorstore", exist_ok=True)
 MISTRAL_API_KEY = "koYSEltxtO2OhW0twIdOJTzbZDxYUEzt"
 EMBEDDING_MODEL = "mistral-embed"
 
-JSONL_PATH = "data/raw/evenements-publics-openagenda.json"
+JSON_PATH = "data/raw/evenements-publics-openagenda.json"
 INDEX_PATH = "data/vectorstore/faiss_index.bin"
 META_PATH = "data/vectorstore/metadata.json"
 
 
-def load_events_streaming(jsonl_path):
+def load_events(json_path):
     """
-    Lit un fichier JSONL massif ligne par ligne sans charger tout en mémoire.
+    Charge un fichier JSON (pas JSONL) provenant de l'API OpenDataSoft.
     """
-    with open(jsonl_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                yield json.loads(line)
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        return data.get("results", [])
 
 
 def chunk_text(text, max_tokens=300):
-    """
-    Découpe un texte long en chunks de taille raisonnable.
-    """
     words = text.split()
     return [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), max_tokens)]
 
@@ -48,8 +44,8 @@ def embed_batch_mistral(texts):
 
 
 def build_faiss_index():
-    print("Lecture du JSONL...")
-    events = list(load_events_streaming(JSONL_PATH))
+    print("Lecture du JSON...")
+    events = load_events(JSON_PATH)
     print(f"{len(events)} événements chargés")
 
     print("Chunking...")
@@ -57,7 +53,7 @@ def build_faiss_index():
     metadata = []
 
     for event in events:
-        description = event.get("description", "")
+        description = event.get("fields", {}).get("description", "")
         event_chunks = chunk_text(description)
 
         for c in event_chunks:

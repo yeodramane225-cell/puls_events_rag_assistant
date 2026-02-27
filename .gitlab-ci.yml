@@ -1,20 +1,33 @@
 stages:
+  - fetch
   - build
   - test
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  MISTRAL_API_KEY: "$MISTRAL_API_KEY"
 
 cache:
   paths:
     - .cache/pip
 
+fetch_jsonl:
+  stage: fetch
+  image: python:3.11
+  script:
+    - mkdir -p data/raw
+    - curl -G "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/evenements-publics-openagenda/records" --data-urlencode "limit=100" -o data/raw/evenements-publics-openagenda.json
+  artifacts:
+    paths:
+      - data/raw/
+    expire_in: 1 week
+
 build_faiss:
   stage: build
   image: python:3.11
+  dependencies:
+    - fetch_jsonl
   before_script:
-    - pip install --upgrade pip
+    - python -m pip install --upgrade pip
     - pip install -r requirements.txt
   script:
     - python src/vectorization/build_faiss_index.py
@@ -29,7 +42,7 @@ test_rag_pipeline:
   dependencies:
     - build_faiss
   before_script:
-    - pip install --upgrade pip
+    - python -m pip install --upgrade pip
     - pip install -r requirements.txt
   script:
     - pytest --maxfail=1 --disable-warnings -q
