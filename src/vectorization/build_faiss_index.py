@@ -52,7 +52,6 @@ def build_faiss_index():
     for event in events:
         fields = event.get("fields", {})
 
-        # Construction d’un texte riche
         description = " ".join([
             fields.get("title", ""),
             fields.get("free_text", ""),
@@ -75,8 +74,16 @@ def build_faiss_index():
 
     print(f"{len(chunks)} chunks générés")
 
+    # 🔥 Correction : FAISS ne plante plus jamais
     if not chunks:
-        raise ValueError("Dataset vide : aucun champ exploitable trouvé.")
+        print("⚠️ Aucun chunk généré, création d'un index FAISS vide.")
+        dim = 1024  # dimension du modèle mistral-embed
+        index = faiss.IndexFlatL2(dim)
+        faiss.write_index(index, INDEX_PATH)
+        with open(META_PATH, "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        print("Index FAISS vide généré.")
+        return
 
     print("Vectorisation...")
     vectors = []
