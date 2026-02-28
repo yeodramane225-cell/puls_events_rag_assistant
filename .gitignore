@@ -1,7 +1,7 @@
 # Environnements virtuels
 venv/
 venv_rag/
-.env/
+.env
 
 # Données brutes et intermédiaires
 data/raw/

@@ -3,10 +3,13 @@ import faiss
 import numpy as np
 import os
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 os.makedirs("data/vectorstore", exist_ok=True)
 
-MISTRAL_API_KEY = "koYSEltxtO2OhW0twIdOJTzbZDxYUEzt"
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 EMBEDDING_MODEL = "mistral-embed"
 
 JSON_PATH = "data/raw/evenements-publics-openagenda.json"
@@ -67,7 +70,6 @@ def build_faiss_index():
             fields.get("region", "")
         ]).strip()
 
-        # 🔥 Correction : chunk par défaut si vide
         if len(description) < 10:
             description = "Aucun contenu disponible pour cet événement."
 
@@ -91,7 +93,7 @@ def build_faiss_index():
     print(f"{len(chunks)} chunks générés")
 
     if not chunks:
-        print("⚠️ Aucun chunk généré, création d'un index FAISS vide.")
+        print("Aucun chunk généré, création d'un index FAISS vide.")
         dim = 1024
         index = faiss.IndexFlatL2(dim)
         faiss.write_index(index, INDEX_PATH)
@@ -137,7 +139,7 @@ def build_faiss_index():
     with open(META_PATH, "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-    print("🎉 Index FAISS généré avec succès !")
+    print("Index FAISS généré avec succès !")
 
 
 if __name__ == "__main__":
