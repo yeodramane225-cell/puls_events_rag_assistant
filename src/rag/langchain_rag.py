@@ -12,6 +12,8 @@ import re
 import numpy as np
 import faiss
 import pandas as pd
+import os
+from dotenv import load_dotenv
 
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 from langchain_core.prompts import PromptTemplate
@@ -19,7 +21,9 @@ from langchain_core.output_parsers import StrOutputParser
 
 from mistralai import Mistral
 
-MISTRAL_API_KEY = "koYSEltxtO2OhW0twIdOJTzbZDxYUEzt"
+load_dotenv()
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+
 EMBED_MODEL = "mistral-embed"
 LLM_MODEL = "mistral-large-latest"
 
@@ -31,7 +35,7 @@ client = Mistral(api_key=MISTRAL_API_KEY)
 def embed_mistral(text: str):
     emb = client.embeddings.create(
         model=EMBED_MODEL,
-        inputs=[text]   # correct pour mistralai 1.12.4
+        inputs=[text]
     )
     return np.array(emb.data[0].embedding, dtype="float32")
 
@@ -102,7 +106,6 @@ Réponds de manière claire, concise et utile.
 # 5. LLM Mistral via LangChain
 # ---------------------------------------------------------
 def call_mistral(prompt_text):
-    # LangChain envoie un StringPromptValue → conversion obligatoire
     if hasattr(prompt_text, "to_string"):
         prompt_text = prompt_text.to_string()
     else:

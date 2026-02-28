@@ -18,10 +18,14 @@ import numpy as np
 import json
 import re
 import requests
+import os
+from dotenv import load_dotenv
 
 from src.rag.dataset_info import event_years
 
-MISTRAL_API_KEY = "koYSEltxtO2OhW0twIdOJTzbZDxYUEzt"
+load_dotenv()
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+
 EMBEDDING_MODEL = "mistral-embed"
 LLM_MODEL = "mistral-large-latest"
 
