@@ -1,150 +1,159 @@
 ## Puls Events — Assistant RAG
-Assistant conversationnel basé sur un pipeline RAG (Retrieval-Augmented Generation) permettant d’interroger les événements publics OpenAgenda en langage naturel.
+Assistant conversationnel basé sur un pipeline RAG (Retrieval‑Augmented Generation) permettant d’interroger en langage naturel les événements publics issus d’OpenAgenda.
 
 ## Objectifs du projet
-Construire un pipeline complet de traitement de données (ingestion → nettoyage → chunking → embeddings → FAISS → génération).
+Construire un pipeline complet : ingestion → nettoyage → enrichissement → chunking → embeddings → FAISS → génération.
 
-Mettre en place un système RAG local basé sur Ollama (Mistral + Nomic Embed Text).
+Mettre en place un système RAG local basé sur les modèles Mistral.
 
 Créer un assistant capable de répondre à des questions sur les événements publics.
 
-Implémenter des tests unitaires garantissant la fiabilité du pipeline.
+Structurer un projet Python reproductible, clair et documenté.
 
-Structurer un projet Python reproductible et documenté.
+Fournir un chatbot interactif pour tester le moteur RAG.
 
 ## Structure du projet
-
+text
 puls_events_rag_assistant/
 │
-├── chat.py                     # Interface console du chatbot
-├── config.yaml                 # Configuration globale
-├── README.md                   # Documentation du projet
+├── chat.py                     # Interface console du chatbot (boucle interactive)
+├── README.md                   # Documentation complète du projet
 ├── requirements.txt            # Dépendances Python
 │
 ├── data/
-│   ├── raw/                    # Données brutes OpenAgenda
+│   ├── raw/                    # Données brutes OpenAgenda (JSONL)
 │   ├── processed/              # Données nettoyées + chunks
 │   └── vectorstore/
 │       ├── faiss_index.bin     # Index vectoriel FAISS
-│       └── metadata.pkl        # Chunks + metadata
+│       ├── metadata.pkl        # Métadonnées (pickle)
+│       └── metadata.json       # Métadonnées (JSON)
 │
 ├── notebooks/
 │   └── exploration.ipynb       # Analyse exploratoire
 │
 ├── src/
 │   ├── ingestion/
-│   │   └── load_parquet.py     # Chargement des données
+│   │   └── load_jsonl.py       # Lecture en streaming du JSONL massif
+│   │
 │   ├── preprocessing/
-│   │   └── clean_and_chunk.py  # Nettoyage + chunking
-│   ├── rag/
-│   │   ├── rag_chain.py        # Prompting + LLM
-│   │   ├── rag_query.py        # Pipeline RAG complet
-│   │   └── dataset_info.py     # Extraction des années
-│   └── vectorization/
-│       └── build_faiss_index.py # Embeddings + FAISS
+│   │   └── clean_and_chunk.py  # Nettoyage, enrichissement et découpage en chunks
+│   │
+│   ├── vectorstore/
+│   │   └── build_faiss_index.py # Génération des embeddings + construction FAISS
+│   │
+│   └── rag/
+│       ├── rag_query.py        # Pipeline RAG complet (retriever + génération)
+│       └── query_mistral.py    # Appel au modèle Mistral (embeddings + génération)
 │
-└── tests/
-    ├── test_dates.py
-    ├── test_chunks.py
-    ├── test_embeddings.py
-    └── test_faiss.py
+└── tests/                      # Tests fonctionnels (optionnels)
+## Phase 1 — Préparation de l’environnement
+Création de l’environnement virtuel (python -m venv venv_rag).
 
-##  Installation et environnement
-1. Cloner le projet
+Activation de l’environnement.
 
-git clone <URL_DU_REPO>
-cd puls_events_rag_assistant
-2. Créer un environnement virtuel
+Installation des dépendances (pip install -r requirements.txt).
 
-python -m venv venv_rag
-3. Activer l’environnement (Windows)
+Création du fichier .env contenant la clé API Mistral.
 
-venv_rag\Scripts\activate
-4. Installer les dépendances
+Résultat : environnement propre, isolé et compatible avec le pipeline RAG.
 
-pip install -r requirements.txt
-5. Installer les modèles Ollama
+## Phase 2 — Ingestion des données OpenAgenda
+Lecture du fichier JSONL en streaming pour éviter de charger plusieurs millions de lignes en mémoire.
 
-ollama pull mistral
-ollama pull nomic-embed-text
+Validation de la structure des événements.
 
-## Pipeline de traitement des données
-1. Nettoyage + Chunking
+Préparation des données pour le pré‑processing.
 
-python src/preprocessing/clean_and_chunk.py
-Ce script :
+Script utilisé : src/ingestion/load_jsonl.py  
+Résultat : données brutes prêtes à être nettoyées.
 
-nettoie les descriptions d’événements
+## Phase 3 — Pré‑processing, enrichissement et chunking
+Nettoyage des champs (titres, descriptions, dates, lieux…).
 
-découpe en chunks cohérents
+Normalisation des textes.
 
-sauvegarde events_chunks.csv
+Enrichissement des descriptions.
 
-2. Génération des embeddings + FAISS
+Découpage en chunks textuels cohérents.
 
-python src/vectorization/build_faiss_index.py
-Ce script :
+Sauvegarde dans data/processed/.
 
-charge les chunks
+Script utilisé : src/preprocessing/clean_and_chunk.py  
+Résultat : données propres, enrichies et adaptées à la vectorisation.
 
-génère les embeddings via Ollama
+## Phase 4 — Construction de la base vectorielle FAISS
+Chargement des chunks pré‑traités.
 
-construit l’index FAISS
+Génération des embeddings via Mistral.
 
-sauvegarde faiss_index.bin + metadata.pkl
+Construction de l’index FAISS (faiss_index.bin).
 
-**Lancer le chatbot**
+Sauvegarde des métadonnées (metadata.pkl, metadata.json).
 
-python chat.py
-Exemple :
+Script utilisé : src/vectorstore/build_faiss_index.py  
+Résultat : index FAISS performant et prêt pour la recherche vectorielle.
 
-Vous : Quels événements ont lieu le 17 mai ?
-Assistant : ...
-Le chatbot utilise :
+## Phase 5 — Intégration du moteur RAG avec LangChain
+Chargement de l’index FAISS et des métadonnées.
 
-FAISS pour retrouver les chunks pertinents
+Initialisation du modèle Mistral (embeddings + génération).
 
-Mistral pour générer la réponse
+Création d’un retriever basé sur FAISS.
 
-OpenAgenda comme source unique
+Construction du pipeline RAG complet :
 
-**Tests unitaires**
-Les tests se trouvent dans tests/ :
+embedding de la question,
 
-Fichier	Rôle
-test_dates.py	Vérifie la cohérence des dates
-test_chunks.py	Vérifie la qualité du chunking
-test_embeddings.py	Vérifie la taille des embeddings
-test_faiss.py	Vérifie que FAISS répond correctement
-Lancer les tests :
+recherche vectorielle,
 
+récupération des chunks pertinents,
 
-**pytest**
-**Choix techniques**
-RAG : permet de répondre à des questions sur des données non structurées.
+injection dans un prompt structuré,
 
-FAISS : index vectoriel performant pour la recherche sémantique.
+génération de la réponse.
 
-Ollama : exécution locale, rapide, sans dépendance cloud.
+Scripts utilisés : rag_query.py, query_mistral.py  
+Résultat : moteur RAG capable de répondre de manière contextualisée.
 
-Mistral : modèle léger et performant pour la génération.
+## Phase 6 — Vérifications intermédiaires du pipeline RAG
+Vérification de la cohérence des métadonnées.
 
-Nomic Embed Text : embeddings adaptés aux données textuelles courtes.
+Vérification de la pertinence des résultats FAISS.
 
-**Limitations actuelles**
-Pas de filtrage géographique avancé (ville, département).
+Vérification de la qualité des réponses générées.
 
-Pas de gestion des doublons OpenAgenda.
+Validation du pipeline complet avant intégration du chatbot.
 
-Pas de mise à jour automatique des données.
+Résultat : pipeline RAG validé techniquement.
 
-Pas encore de test unitaire pour rag_query().
+## Phase 7 — Création du ChatBot interactif
+Développement du script chat.py.
 
-**Améliorations possibles**
-Ajouter un filtrage par ville / date / catégorie.
+Mise en place d’une boucle interactive dans le terminal.
 
-Ajouter un test d’intégration complet.
+Gestion des commandes /help et exit.
 
-Ajouter une interface web (Streamlit).
+Passage automatique de chaque question dans le pipeline RAG.
 
-Ajouter un scheduler pour mettre à jour les données.
+Formatage clair et lisible des réponses.
+
+Exemple testé :  
+« quels événement a lieu ce weekend à paris en 2025 ? »
+
+Résultat : interface simple, fonctionnelle et intuitive.
+
+## Phase 8 — Tests fonctionnels du RAG
+Test réel avec une question complexe.
+
+Vérification de la compréhension de la date, de la ville et du contexte.
+
+Vérification de la recherche vectorielle FAISS.
+
+Vérification de la cohérence des réponses générées.
+
+Résultat : réponses cohérentes, contextualisées et fiables.
+
+## Phase 9 — Finalisation et validation du projet
+Vérification du bon fonctionnement du pipeline complet.
+
+Validation de la cohérence FAISS → RAG → Chatbot.
